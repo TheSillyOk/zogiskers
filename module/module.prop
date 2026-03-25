@@ -1,7 +1,7 @@
-id=zygisk_module_example
-name=Zygisk Module Example
+id=zogisko_one
+name=Zogisko one
 version=${versionName}
 versionCode=${versionCode}
-author=undefined
-description=An example Zygisk module
+author=TheSillyOk
+description=Thy first, probably forgotten, not rotten.
 

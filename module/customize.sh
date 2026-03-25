@@ -2,6 +2,7 @@
 SKIPUNZIP=1
 
 NAME=$(grep_prop name "${TMPDIR}/module.prop")
+ID=$(grep_prop id "${TMPDIR}/module.prop")
 VERSION=$(grep_prop version "${TMPDIR}/module.prop")
 ui_print "- Installing $NAME $VERSION"
 
@@ -63,6 +64,12 @@ extract() {
 
 ui_print "- Extracting module files"
 extract "$ZIPFILE" 'module.prop'     "$MODPATH"
+if [ -f "/data/adb/modules/${ID}/config.json" ]; then
+  ui_print "- Found existing config"
+  cp "/data/adb/modules/${ID}/config.json" "$MODPATH"
+else
+  extract "$ZIPFILE" 'config.json'     "$MODPATH"
+fi
 
 if [ "$ARCH" = "x86" ] || [ "$ARCH" = "x64" ]; then
   if [[ "$SUPPORTS_64BIT" == "true" ]]; then

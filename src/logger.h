@@ -1,12 +1,10 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
-#include <stdlib.h>
-
 #include <android/log.h>
 #include <errno.h>
 
-#define TAG "ZygiskModuleExample"
+#define TAG "zogisko-one"
 
 #ifdef DEBUG
   #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, TAG, __VA_ARGS__)

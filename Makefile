@@ -10,12 +10,12 @@ endif
 
 BUILD_TYPE ?= debug
 ifeq ($(BUILD_TYPE), debug)
-	TYPE_CFLAGS = -g -O0 -DDEBUG
+	TYPE_CFLAGS := -g -O0 -DDEBUG
 else
-	TYPE_CFLAGS = -O3 -ffast-math -flto -fvisibility=hidden -Wl,-s -Wl,--gc-sections
+	TYPE_CFLAGS := -O3 -ffast-math -flto -fvisibility=hidden -Wl,-s -Wl,--gc-sections
 endif
 
-CFLAGS = -Wall
+CFLAGS := -Wall -Wextra -nostartfiles
 
 # Zygisk related variables
 ZYGISK_FILES := src/main.c
@@ -23,7 +23,7 @@ ZYGISK_FILES := src/main.c
 VER_NAME ?= v1
 VER_CODE ?= $(shell git rev-list HEAD --count)
 COMMIT_HASH ?= $(shell git rev-parse --verify --short HEAD)
-MODULE_ZIP ?= zygisk_example_module.zip
+MODULE_ZIP ?= zogisko_one.zip
 
 clean:
 	@echo Cleaning build artifacts...

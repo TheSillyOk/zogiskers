@@ -1,0 +1,20 @@
+{
+  "apps": {
+    "com.google.android.apps.photos": [
+      {
+        "field": "fingerprint",
+        "class": "build",
+        "name": "FINGERPRINT",
+        "type": "Ljava/lang/String;",
+        "value": "google/marlin/marlin:10/QP1A.191005.007.A3/5972272:user/release-keys"
+      }
+    ]
+  },
+  "fields": {
+    "fingerprint": {
+      "class": "build",
+      "name": "FINGERPRINT",
+      "type": "Ljava/lang/String;"
+    }
+  }
+}
