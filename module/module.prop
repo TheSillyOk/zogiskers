@@ -1,0 +1,7 @@
+id=zygisk_module_example
+name=Zygisk Module Example
+version=${versionName}
+versionCode=${versionCode}
+author=undefined
+description=An example Zygisk module
+
