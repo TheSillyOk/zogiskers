@@ -73,18 +73,15 @@ char *get_package_name(char *data_dir, char *process_name) {
   struct stat st;
   if (stat(data_dir, &st) == -1) {
     LOGW("Failed to stat data directory: %s", data_dir);
+
+    return process_name;
   }
 
   char *last_slash = strrchr(data_dir, '/');
   if (!last_slash) {
-    LOGE("Failed to parse package name from data directory: %s", data_dir);
+    LOGW("Failed to parse package name from data directory: %s", data_dir);
 
-    if(strstr(process_name, ":") != 0) {
-      LOGI("Using process_name (%s) as a fallback", process_name);
-      return process_name;
-    }
-
-    return NULL;
+    return process_name;
   }
 
   char *pkg_name = last_slash + 1;
@@ -107,12 +104,18 @@ void pre_app_specialize(void *mod_data, struct AppSpecializeArgs *args) {
 
   char *process_name = get_string_data(java_env, args->nice_name);
   char *data_dir = get_string_data(java_env, args->app_data_dir);
-  if (!process_name || !data_dir) {
-    LOGE("Failed to get process name or data dir");
+  if (!process_name && !data_dir) {
+    LOGE("Failed to get process name and data dir");
     goto free;
   }
 
-  char *package_name = get_package_name(data_dir, process_name);
+  char *package_name;
+  if (data_dir) {
+    package_name = get_package_name(data_dir, process_name);
+  } else {
+    package_name = process_name;
+  }
+
   if (strlen(package_name) <= 1) {
     LOGE("Failed to get package name for process: %s", process_name);
     goto free;
