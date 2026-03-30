@@ -122,12 +122,18 @@ void pre_app_specialize(void *mod_data, struct AppSpecializeArgs *args) {
   }
 
   int fd = api_table->connectCompanion(api_table->impl);
+  if (fd == -1) {
+    LOGE("Failed to connect to companion");
+    goto free;
+  }
+
   write(fd, package_name, strlen(package_name));
   LOGD("pkg sent: %s len(%u)", package_name, (unsigned int)strlen(package_name));
 
   unsigned int fields = 0;
   read(fd, &fields, sizeof(fields));
   LOGD("pre-fields: %d", fields);
+
   if (fields == 0) {
     LOGD("pkg: %s not in target, skip.", package_name);
     goto free;
