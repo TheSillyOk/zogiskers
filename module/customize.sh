@@ -5,11 +5,15 @@ ID=$(grep_prop id "${TMPDIR}/module.prop")
 VERSION=$(grep_prop version "${TMPDIR}/module.prop")
 ui_print "- Installing $NAME $VERSION"
 
-if [ "$ARCH" != "arm" ] && [ "$ARCH" != "arm64" ] && [ "$ARCH" != "x86" ] && [ "$ARCH" != "x64" ]; then
-  abort "! Unsupported platform: $ARCH"
+if [ "$ARCH" != "arm" ] || [ "$ARCH" != "arm64" ]; then
+  ARCH_TYPE="arm"
+elif [ "$ARCH" != "x86" ] || [ "$ARCH" != "x64" ]; then
+  ARCH_TYPE="x86"
 else
-  ui_print "- Device platform: $ARCH"
+  abort "! Unsupported platform: $ARCH"
 fi
+
+ui_print "- Device platform: $ARCH"
 
 CPU_ABIS_PROP1=$(getprop ro.system.product.cpu.abilist)
 CPU_ABIS_PROP2=$(getprop ro.product.cpu.abilist)
@@ -33,33 +37,25 @@ if [[ "$CPU_ABIS" == *"x86"* && "$CPU_ABIS" != "x86_64" || "$CPU_ABIS" == *"arme
   ui_print "- Device supports 32-bit"
 fi
 
-if [ "$ARCH" = "x86" ] || [ "$ARCH" = "x64" ]; then
-  rm -r "$MODPATH/zygisk/arm"*
-  if [[ "$SUPPORTS_64BIT" == "true" ]]; then
-    ui_print "- Keeping x64 libraries"
-  else
-    rm "$MODPATH/zygisk/x86_64.so"
-  fi
+rm_if_not_arch() {
+  local path="$1"
+  local target_arch="$2"
+  local bits="$3"
 
-  if [[ "$SUPPORTS_32BIT" == "true" ]]; then
-    ui_print "- Keeping x86 libraries"
-  else
-    rm "$MODPATH/zygisk/x86.so"
-  fi
-else
-  rm -r "$MODPATH/zygisk/x86"*
-  if [[ "$SUPPORTS_64BIT" == "true" ]]; then
-    ui_print "- Keeping arm64 libraries"
-  else
-    rm "$MODPATH/zygisk/arm64-v8a.so"
-  fi
+  local supports_bit="SUPPORTS_${bits}BIT"
+  eval supports_bit="\$$supports_bit"
 
-  if [[ "$SUPPORTS_32BIT" == "true" ]]; then
-    ui_print "- Keeping arm libraries"
+  if [[ "$target_arch" != "$ARCH_TYPE" || "${supports_bit}" != "true" ]]; then
+    rm "${MODPATH}/${path}"
   else
-    rm "$MODPATH/zygisk/armeabi-v7a.so"
+    ui_print "- Keeping ${path} (${target_arch} ${bits}-bits)"
   fi
-fi
+}
+
+rm_if_not_arch "zygisk/x86_64.so" "x86" "64"
+rm_if_not_arch "zygisk/x86.so" "x86" "32"
+rm_if_not_arch "zygisk/arm64-v8a.so" "arm" "64"
+rm_if_not_arch "zygisk/armeabi-v7a.so" "arm" "32"
 
 if [ -f "/data/adb/modules/${ID}/config.json" ]; then
   ui_print "- Keeping existing config"
