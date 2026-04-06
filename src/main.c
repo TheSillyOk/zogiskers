@@ -136,6 +136,7 @@ void pre_app_specialize(void *mod_data, struct AppSpecializeArgs *args) {
 
   if (fields == 0) {
     LOGD("pkg: %s not in target, skip.", package_name);
+    close(fd);
     goto free;
   }
 
@@ -189,6 +190,7 @@ void pre_app_specialize(void *mod_data, struct AppSpecializeArgs *args) {
     if ((*java_env)->ExceptionCheck(java_env)) (*java_env)->ExceptionClear(java_env);
     (*java_env)->DeleteLocalRef(java_env, fclass);
   }
+  close(fd);
 
 free:
   if (process_name) free(process_name);
@@ -313,6 +315,7 @@ skip_creation:
   /* find requested app for early skip or execution */
   if (!app) {
     LOGI("pkg: %s not targetted, skip", pkg);
+    write(fd, &f_s, sizeof(f_s));
     goto close;
   }
 
@@ -380,7 +383,6 @@ close:
   if(c_fd) close(c_fd);
 fd_close:
   if(fd) {
-    write(fd, &f_s, sizeof(f_s));
     close(fd);
   }
   return;
