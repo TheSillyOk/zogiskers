@@ -27,10 +27,10 @@ endif
 all: debug release
 
 debug:
-	$(MAKE) -s BUILD_TYPE=debug build
+	$(MAKE) -s build BUILD_TYPE=debug
 
 release:
-	$(MAKE) -s BUILD_TYPE=release build
+	$(MAKE) -s build BUILD_TYPE=release
 
 clean:
 	@echo Cleaning build artifacts...
@@ -43,7 +43,7 @@ build:
 
 	@echo Building Zygisk library...
 	@for arch in $(ARCHS); do \
-		$(CC_ARCH) $(CFLAGS) $(TYPE_CFLAGS) -shared -fPIC $(ZYGISK_FILES) -Isrc/ -o $(BUILD_DIR)/$(BUILD_TYPE)/zygisk/$$arch.so -llog; \
+		$(MAKE) -s zygisk BUILD_TYPE=$(BUILD_TYPE) ARCH=$$arch; \
 	done
 	@sed -e 's/$${versionName}/$(VER_NAME) ($(VERSION))/g' \
              -e 's/$${versionCode}/$(VER_CODE)/g' \
@@ -52,6 +52,9 @@ build:
 	@echo Creating module zip...
 	@mkdir -p $(BUILD_DIR)/out
 	@cd $(BUILD_DIR)/$(BUILD_TYPE) && zip -qr9 ../out/$(MODULE_ZIP) .
+
+zygisk:
+	$(CC_ARCH) $(CFLAGS) $(TYPE_CFLAGS) -shared -fPIC $(ZYGISK_FILES) -Isrc/ -o $(BUILD_DIR)/$(BUILD_TYPE)/zygisk/$(ARCH).so -llog
 
 installKsu: build
 	$(ADB_CMD)su -c "/data/adb/ksud module install $(INSTALL_PATH)"
