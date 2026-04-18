@@ -1,57 +1,60 @@
-NDK_PATH ?= $(ANDROID_HOME)/ndk/29.0.13113456
-.DEFAULT_GOAL := all
+include common.mk
 
-ARCH ?= $(shell uname -m)
-ifeq ($(ARCH), x86_64)
-	CCA ?= $(NDK_PATH)/toolchains/llvm/prebuilt/linux-x86_64/bin/clang
-else
-	CCA ?= clang
-endif
-
-BUILD_TYPE ?= debug
 ifeq ($(BUILD_TYPE), debug)
 	TYPE_CFLAGS := -g -O0 -DDEBUG
 else
 	TYPE_CFLAGS := -O3 -ffast-math -flto -fvisibility=hidden -Wl,-s -Wl,--gc-sections
 endif
 
+ifneq ($(TERMUX_BUILD), 1)
+	ADB_SHELL := adb shell 
+else
+	ADB_SHELL := 
+endif
+
 CFLAGS := -Wall -Wextra -nostartfiles
 
-# Zygisk related variables
 ZYGISK_FILES := src/main.c
 
-VER_NAME ?= v1
-VER_CODE ?= $(shell git rev-list HEAD --count)
-COMMIT_HASH ?= $(shell git rev-parse --verify --short HEAD)
-MODULE_ZIP ?= zogisko_one.zip
+VERSION ?= $(VER_NAME)-$(VER_CODE)-$(COMMIT_HASH)-$(BUILD_TYPE)
+MODULE_ZIP ?= $(MODULE_NAME)-$(VERSION).zip
+
+.PHONY: build debug release installKsu installMagisk installAPatch
+
+all: debug release
+
+debug:
+	$(MAKE) -s BUILD_TYPE=debug build
+
+release:
+	$(MAKE) -s BUILD_TYPE=release build
 
 clean:
 	@echo Cleaning build artifacts...
 	@rm -rf build
 
-installKsu: all
-	su -c "/data/adb/ksud module install $(MODULE_ZIP)"
-
-installMagisk: all
-	su -M -c "magisk --install-module $(MODULE_ZIP)"
-
-installAPatch: all
-	su -c "/data/adb/apd module install $(MODULE_ZIP)"
-
-all:
+build:
 	@echo Creating build directory...
-	@mkdir -p build/zygisk
-	@cp -r module/* build
+	@mkdir -p $(BUILD_DIR)/$(BUILD_TYPE)/zygisk
+	@cp -r module/* $(BUILD_DIR)/$(BUILD_TYPE)
 
 	@echo Building Zygisk library...
-	@$(CCA) $(CFLAGS) $(TYPE_CFLAGS) --target=aarch64-linux-android25 -shared -fPIC $(ZYGISK_FILES) -Isrc/ -o build/zygisk/arm64-v8a.so -llog
-	@$(CCA) $(CFLAGS) $(TYPE_CFLAGS) --target=armv7a-linux-androideabi25 -shared -fPIC $(ZYGISK_FILES) -Isrc/ -o build/zygisk/armeabi-v7a.so -llog
-	@$(CCA) $(CFLAGS) $(TYPE_CFLAGS) --target=x86_64-linux-android25 -shared -fPIC $(ZYGISK_FILES) -Isrc/ -o build/zygisk/x86_64.so -llog
-	@$(CCA) $(CFLAGS) $(TYPE_CFLAGS) --target=i686-linux-android25 -shared -fPIC $(ZYGISK_FILES) -Isrc/ -o build/zygisk/x86.so -llog
-
-	@sed -e 's/$${versionName}/$(VER_NAME) ($(VER_CODE)-$(COMMIT_HASH)-$(BUILD_TYPE))/g' \
+	@for arch in $(ARCHS); do \
+		$(CC_ARCH) $(CFLAGS) $(TYPE_CFLAGS) -shared -fPIC $(ZYGISK_FILES) -Isrc/ -o $(BUILD_DIR)/$(BUILD_TYPE)/zygisk/$$arch.so -llog; \
+	done
+	@sed -e 's/$${versionName}/$(VER_NAME) ($(VERSION))/g' \
              -e 's/$${versionCode}/$(VER_CODE)/g' \
-             module/module.prop > build/module.prop
+             module/module.prop > build/$(BUILD_TYPE)/module.prop
 
 	@echo Creating module zip...
-	@cd build && zip -qr9 ../$(MODULE_ZIP) .
+	@mkdir -p $(BUILD_DIR)/out
+	@cd $(BUILD_DIR)/$(BUILD_TYPE) && zip -qr9 ../out/$(MODULE_ZIP) .
+
+installKsu: build
+	$(ADB_SHELL)su -c "/data/adb/ksud module install $(BUILD_DIR)/out/$(MODULE_ZIP)"
+
+installMagisk: build
+	$(ADB_SHELL)su -M -c "magisk --install-module $(BUILD_DIR)/out/$(MODULE_ZIP)"
+
+installAPatch: build
+	$(ADB_SHELL)su -c "/data/adb/apd module install $(BUILD_DIR)/out/$(MODULE_ZIP)"
