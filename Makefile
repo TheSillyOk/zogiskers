@@ -3,10 +3,16 @@ include common.mk
 ifeq ($(BUILD_TYPE), debug)
 	TYPE_CFLAGS := -g -O0 -DDEBUG
 else
-	TYPE_CFLAGS := -O3 -ffast-math -flto -fvisibility=hidden -Wl,-s -Wl,--gc-sections
+	TYPE_CFLAGS := -O3 -ffast-math -flto
 endif
 
-CFLAGS := -Wall -Wextra -nostartfiles
+CFLAGS := -fno-unwind-tables -fno-asynchronous-unwind-tables -Wl,--gc-sections  \
+		  -Wl,--icf=all -Wl,-z,norelro -Wl,--pack-dyn-relocs=relr -nostartfiles \
+		  -Wl,--strip-all -Wl,--exclude-libs,ALL -Wl,-z,lazy -fno-plt           \
+		  -fvisibility=hidden -Wl,--build-id=none -Wl,--as-needed               \
+		  -Wall -Wextra -Wpedantic -Wno-gnu-flexible-array-initializer		\
+		  -Wno-variadic-macros -Wno-variadic-macro-arguments-omitted            \
+		  -Wno-gnu-zero-variadic-macro-arguments
 
 ZYGISK_FILES := src/main.c
 
