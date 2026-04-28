@@ -16,11 +16,9 @@ jobs:
           submodules: "recursive"
           fetch-depth: 0
 
-      - name: Accept NDK license
-        run: echo "y" | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.13113456"
-
       - name: Build
         run: |
+          export NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           make -j$(nproc)
 
       - name: Upload release
