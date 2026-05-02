@@ -6,9 +6,9 @@ else
 	TYPE_CFLAGS := -O3 -ffast-math -flto
 endif
 
-CFLAGS := -fno-unwind-tables -fno-asynchronous-unwind-tables -Wl,--gc-sections  \
+CFLAGS := -fno-unwind-tables -fno-asynchronous-unwind-tables -Wl,--gc-sections          \
 		  -Wl,--icf=all -Wl,-z,norelro -Wl,--pack-dyn-relocs=relr -nostartfiles \
-		  -Wl,--strip-all -Wl,--exclude-libs,ALL -Wl,-z,lazy -fno-plt           \
+		  -Wl,--strip-all -Wl,--exclude-libs,ALL -Wl,-z,lazy           	        \
 		  -fvisibility=hidden -Wl,--build-id=none -Wl,--as-needed               \
 		  -Wall -Wextra -Wpedantic -Wno-gnu-flexible-array-initializer		\
 		  -Wno-variadic-macros -Wno-variadic-macro-arguments-omitted            \
@@ -20,15 +20,15 @@ VERSION ?= $(VER_CODE)-$(COMMIT_HASH)-$(BUILD_TYPE)
 MODULE_ZIP ?= $(MODULE_NAME)-$(VER_NAME)-$(VERSION).zip
 ZIP_OUT ?= $(BUILD_DIR)/out/$(MODULE_ZIP)
 
-ifneq ($(TERMUX_BUILD), 1)
-	ADB_CMD := adb push $(ZIP_OUT) /data/local/tmp && adb shell 
+ifeq ($(TERMUX_VERSION),)
+	ADB_PUSH := adb push $(ZIP_OUT) /data/local/tmp
+	ADB_SHELL := adb shell 
 	INSTALL_PATH := /data/local/tmp/$(MODULE_ZIP)
 else
-	ADB_CMD := 
 	INSTALL_PATH := $(ZIP_OUT)
 endif
 
-.PHONY: build debug release installKsu installMagisk installAPatch
+.PHONY: zygisk build
 
 all: debug release
 
@@ -62,11 +62,12 @@ build:
 zygisk:
 	$(CC_ARCH) $(CFLAGS) $(TYPE_CFLAGS) -shared -fPIC $(ZYGISK_FILES) -Isrc/ -o $(BUILD_DIR)/$(BUILD_TYPE)/zygisk/$(ARCH).so -llog
 
-installKsu: build
-	$(ADB_CMD)su -c "/data/adb/ksud module install $(INSTALL_PATH)"
+installModule: build
+	$(ADB_PUSH)
+	@$(ADB_SHELL)su -M -c "magisk --install-module $(INSTALL_PATH) 2&>/dev/null"|| \
+	$(ADB_SHELL)su -c "ksud module install $(INSTALL_PATH) 2&>/dev/null"||        \
+	$(ADB_SHELL)su -c "apd module install $(INSTALL_PATH) 2&>/dev/null"           \
+	|| echo "[X] Could not find valid CLI to install the module"
 
-installMagisk: build
-	$(ADB_CMD)su -M -c "magisk --install-module $(INSTALL_PATH)"
-
-installAPatch: build
-	$(ADB_CMD)su -c "/data/adb/apd module install $(BUILD_DIR)/out/$(INSTALL_PATH)"
+installModuleAndReboot: installModule
+	$(ADB_SHELL)su -c reboot

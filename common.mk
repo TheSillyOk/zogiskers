@@ -17,11 +17,7 @@ NDK_PATH ?= $(ANDROID_HOME)/ndk/$(NDK_VERSION)
 TOOLCHAIN ?= $(NDK_PATH)/toolchains/llvm/prebuilt/linux-x86_64
 SYSROOT ?= $(TOOLCHAIN)/sysroot
 
-ifneq ($(TERMUX_VERSION),)
-    TERMUX_BUILD := 1
-endif
-
-ifneq ($(TERMUX_BUILD), 1)
+ifeq ($(TERMUX_VERSION),)
 	CC = $(TOOLCHAIN)/bin/clang
 	AR = $(TOOLCHAIN)/bin/llvm-ar
 	STRIP = $(TOOLCHAIN)/bin/llvm-strip
