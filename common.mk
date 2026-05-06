@@ -15,12 +15,12 @@ NDK_VERSION ?= 29.0.13113456
 ANDROID_HOME ?= $(HOME)/Android/Sdk
 NDK_PATH ?= $(ANDROID_HOME)/ndk/$(NDK_VERSION)
 TOOLCHAIN ?= $(NDK_PATH)/toolchains/llvm/prebuilt/linux-x86_64
-SYSROOT ?= $(TOOLCHAIN)/sysroot
 
 ifeq ($(TERMUX_VERSION),)
 	CC = $(TOOLCHAIN)/bin/clang
 	AR = $(TOOLCHAIN)/bin/llvm-ar
 	STRIP = $(TOOLCHAIN)/bin/llvm-strip
+	SYSROOT ?= $(TOOLCHAIN)/sysroot
 else
 	CC = clang
 	AR = llvm-ar
@@ -34,4 +34,8 @@ TARGET_armeabi-v7a = armv7a-linux-androideabi$(API_LEVEL)
 TARGET_x86 = i686-linux-android$(API_LEVEL)
 TARGET_x86_64 = x86_64-linux-android$(API_LEVEL)
 
-CC_ARCH = $(CC) --target=$(TARGET_$(ARCH)) --sysroot=$(SYSROOT)
+ifneq ($(SYSROOT),)
+	CC_ARCH = $(CC) --target=$(TARGET_$(ARCH)) --sysroot=$(SYSROOT)
+else
+	CC_ARCH = $(CC) --target=$(TARGET_$(ARCH))
+endif
