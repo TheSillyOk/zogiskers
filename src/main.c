@@ -142,16 +142,16 @@ void pre_app_specialize(void *mod_data, struct AppSpecializeArgs *args) {
   }
 
   char name[64] = {0}, type[64] = {0}, class[64] = {0}, value[256] = {0};
-  unsigned int r = 0;
+  unsigned int comp_i = 0;
 
   jclass fclass;
   for (unsigned int i = 0; i < fields; i++) {
     LOGD("(%d) receiving field...", i);
 
     write(fd, &i, sizeof(i));
-    read(fd, &r, sizeof(r));
-    LOGD("reconcile r:%d vs i:%d", r, i);
-    if (r > i) continue;
+    read(fd, &comp_i, sizeof(comp_i));
+    LOGD("reconcile comp_i:%d vs i:%d", comp_i, i);
+    if (comp_i > i) continue;
     write(fd, &i, sizeof(i)); // ready reply
 
     read_from_fd(fd, name, sizeof(name), i);
@@ -242,7 +242,7 @@ char *strndup(const char *restrict str, size_t length) {
 }
 
 void zygisk_companion_entry(int fd) {
-  char pkg[128] = {0}; unsigned int f_s = 0; struct stat st;
+  char pkg[128] = {0}; unsigned int fields_count = 0; struct stat st;
   const char *filename = "/data/adb/modules/zogisko_one/config.json";
 
   #undef TAG
@@ -255,21 +255,21 @@ void zygisk_companion_entry(int fd) {
   }
   LOGD("pkg: %s len(%u)", pkg, (unsigned int)strlen(pkg));
 
-  int c_fd = open(filename, O_RDONLY);
-  if (c_fd < 0) {
+  int config_fd = open(filename, O_RDONLY);
+  if (config_fd < 0) {
     PLOGE("Couldn't open config");
     goto close;
   }
 
-  if (fstat(c_fd, &st) != 0) {
+  if (fstat(config_fd, &st) != 0) {
     PLOGE("Couldn't stat config");
     goto close;
   }
 
   /* json is cached and up-to-date, re-use json_ptr */
   if (likely(st.st_mtime == cached_mtime) && likely(apps->v->size > 0)) {
-    LOGD("skipped table creation, re-using existing ptr");
-    close(c_fd);
+    LOGD("skipped table creation, reusing existing ptr");
+    close(config_fd);
     goto skip_creation;
   }
   if(cached_mtime != 0) free(json_ptr); // not first execution, free ptr
@@ -281,7 +281,7 @@ void zygisk_companion_entry(int fd) {
     goto close;
   }
 
-  ssize_t bytes_read = read(c_fd, json_ptr, st.st_size);
+  ssize_t bytes_read = read(config_fd, json_ptr, st.st_size);
   if (bytes_read < st.st_size) {
     PLOGE("Failed to read the entire JSON");
     free(json_ptr);
@@ -317,16 +317,16 @@ skip_creation:
   /* find requested app for early skip or execution */
   if (!app) {
     LOGI("pkg: %s not targetted, skip", pkg);
-    write(fd, &f_s, sizeof(f_s));
+    write(fd, &fields_count, sizeof(fields_count));
     goto close;
   }
 
   const char *app_name = strndup(json_ptr + app->k->start, (int)(app->k->end - app->k->start));
   LOGD("Matched app: %s, fields=%d", app_name, app->v->size);
-  f_s = app->v->size;
-  write(fd, &f_s, sizeof(f_s));
+  fields_count = app->v->size;
+  write(fd, &fields_count, sizeof(fields_count));
 
-  for (unsigned int i = 0; i < f_s; i++) {
+  for (unsigned int i = 0; i < fields_count; i++) {
     /* current entry in the app's array of objects
     can obtain field, value, name, type, build... */
     const jsmnf_pair *entry = &app->fields[i];
@@ -346,30 +346,32 @@ skip_creation:
       LOGD("(%d) Field not set or fields missing", i);
       field = entry;
     }
+
     const jsmnf_pair *f_name = jsmnf_find(field, "name", 4);
     const jsmnf_pair *f_type = jsmnf_find(field, "type", 4);
     const jsmnf_pair *f_class = jsmnf_find(field, "class", 5);
     const jsmnf_pair *f_value = jsmnf_find(entry, "value", 5);
-    if (!f_name || !f_type || !f_class) {
-      LOGW("(%d) Missing class, type or name", i);
+    if (!f_name || !f_type || !f_class || !f_value) {
+      LOGW("(%d) Missing class, type, name or value", i);
       continue;
     }
     const char *name = strndup(json_ptr + f_name->v->start, (int)(f_name->v->end - f_name->v->start));
     const char *type = strndup(json_ptr + f_type->v->start, (int)(f_type->v->end - f_type->v->start));
     const char *fclass = strndup(json_ptr + f_class->v->start, (int)(f_class->v->end - f_class->v->start));
     const char *value = strndup(json_ptr + f_value->v->start, (int)(f_value->v->end - f_value->v->start));
+
     LOGD("app(%d)=%s\nname: %s\ntype: %s\nclass: %s\nvalue: %s", i, app_name, name, type, fclass, value);
 
-    unsigned int r = 0;
+    unsigned int spec_i = 0;
 
     wait:
     /* here we keep waiting till both loops match
     since we do skip invalid fields (missing keys) */
-    read(fd, &r, sizeof(r));
+    read(fd, &spec_i, sizeof(spec_i));
     write(fd, &i, sizeof(i));
-    LOGD("reconcile r:%d vs i:%d", r, i);
-    if(r < i) goto wait;
-    read(fd, &r, sizeof(r)); // wait for ready reply
+    LOGD("reconcile spec_i:%d vs i:%d", spec_i, i);
+    if(spec_i < i) goto wait;
+    read(fd, &spec_i, sizeof(spec_i)); // wait for ready reply
 
     write_to_fd(fd, name);
     write_to_fd(fd, type);
@@ -382,18 +384,18 @@ skip_creation:
   free((void*)app_name);
 
 close:
-  if(c_fd) close(c_fd);
+  if(config_fd) close(config_fd);
 fd_close:
   if(fd) {
     close(fd);
   }
   return;
 free:
-  close(c_fd);
+  close(config_fd);
   free(table);
   free(json_ptr);
   if(fd) {
-    write(fd, &f_s, sizeof(f_s));
+    write(fd, &fields_count, sizeof(fields_count));
     close(fd);
   }
   return;
