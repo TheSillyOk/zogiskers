@@ -230,7 +230,8 @@ void zygisk_module_entry(struct api_table *table, JNIEnv *env) {
 static time_t cached_mtime = 0;
 char *json_ptr;
 jsmnf_table *table;
-const jsmnf_pair *apps; const jsmnf_pair *fields_obj;
+const jsmnf_pair *apps; const jsmnf_pair *global; const jsmnf_pair *fields_obj;
+unsigned int global_count = 0;
 
 char *strndup(const char *restrict str, size_t length) {
   char *restrict copy = malloc(length + 1);
@@ -243,7 +244,7 @@ char *strndup(const char *restrict str, size_t length) {
 }
 
 void zygisk_companion_entry(int fd) {
-  char pkg[128] = {0}; unsigned int fields_count = 0; unsigned int global_count = 0; struct stat st;
+  char pkg[128] = {0}; unsigned int fields_count = 0; struct stat st;
   const char *filename = "/data/adb/modules/zogisko_one/config.json";
 
   #undef TAG
@@ -278,6 +279,7 @@ void zygisk_companion_entry(int fd) {
     free(json_ptr);
     free(table);
     table = NULL;
+    global_count = 0;
   }
   cached_mtime = st.st_mtime;
 
@@ -314,6 +316,13 @@ void zygisk_companion_entry(int fd) {
     goto free;
   }
 
+  global = jsmnf_find(apps, "*", strlen("*"));
+  if (global) {
+    global_count = global->v->size;
+  } else {
+    LOGI("No global target");
+  }
+
 skip_creation:
   ;
   const jsmnf_pair *app = jsmnf_find(apps, pkg, strlen(pkg));
@@ -323,19 +332,12 @@ skip_creation:
     goto skip_direct;
   }
 
-  LOGD("Matched app: %s, fields=%d", pkg, app->v->size);
   fields_count = app->v->size;
+  LOGD("Matched app: %s, fields=%d", pkg, app->v->size);
 
 skip_direct:
   ;
-  const jsmnf_pair *global = jsmnf_find(apps, "*", strlen("*"));
-  if (global) {
-    global_count = global->v->size;
-    fields_count += global_count;
-  } else {
-    LOGI("No global targets");
-  }
-
+  fields_count += global_count;
   write(fd, &fields_count, sizeof(fields_count));
 
   const jsmnf_pair *field = NULL;
