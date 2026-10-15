@@ -229,6 +229,7 @@ void zygisk_module_entry(struct api_table *table, JNIEnv *env) {
 
 static time_t cached_mtime = 0;
 char *json_ptr;
+jsmnf_table *table;
 const jsmnf_pair *apps; const jsmnf_pair *fields_obj;
 
 char *strndup(const char *restrict str, size_t length) {
@@ -242,7 +243,7 @@ char *strndup(const char *restrict str, size_t length) {
 }
 
 void zygisk_companion_entry(int fd) {
-  char pkg[128] = {0}; unsigned int fields_count = 0; struct stat st;
+  char pkg[128] = {0}; unsigned int fields_count = 0; unsigned int global_count = 0; struct stat st;
   const char *filename = "/data/adb/modules/zogisko_one/config.json";
 
   #undef TAG
@@ -268,11 +269,16 @@ void zygisk_companion_entry(int fd) {
 
   /* json is cached and up-to-date, re-use json_ptr */
   if (likely(st.st_mtime == cached_mtime) && likely(apps->v->size > 0)) {
-    LOGD("skipped table creation, reusing existing ptr");
+    LOGD("Skipped table creation, re using existing ptr");
     close(config_fd);
     goto skip_creation;
   }
-  if(cached_mtime != 0) free(json_ptr); // not first execution, free ptr
+
+  if (cached_mtime != 0) {
+    free(json_ptr);
+    free(table);
+    table = NULL;
+  }
   cached_mtime = st.st_mtime;
 
   json_ptr = malloc(st.st_size);
@@ -289,7 +295,6 @@ void zygisk_companion_entry(int fd) {
   }
 
   jsmnf_loader loader;
-  jsmnf_table *table = NULL;
   size_t table_len = 0;
 
   jsmnf_init(&loader);
@@ -303,8 +308,6 @@ void zygisk_companion_entry(int fd) {
   if (!fields_obj) {
     LOGW("Couldn't find the fields object array. Proceeding...");
   }
-  const jsmnf_pair *field;
-
   apps = jsmnf_find(root, "apps", 4);
   if (!apps) {
     LOGE("Error finding apps object");
@@ -316,20 +319,35 @@ skip_creation:
   const jsmnf_pair *app = jsmnf_find(apps, pkg, strlen(pkg));
   /* find requested app for early skip or execution */
   if (!app) {
-    LOGI("pkg: %s not targetted, skip", pkg);
-    write(fd, &fields_count, sizeof(fields_count));
-    goto close;
+    LOGI("pkg: %s not targetted directly", pkg);
+    goto skip_direct;
   }
 
-  const char *app_name = strndup(json_ptr + app->k->start, (int)(app->k->end - app->k->start));
-  LOGD("Matched app: %s, fields=%d", app_name, app->v->size);
+  LOGD("Matched app: %s, fields=%d", pkg, app->v->size);
   fields_count = app->v->size;
+
+skip_direct:
+  ;
+  const jsmnf_pair *global = jsmnf_find(apps, "*", strlen("*"));
+  if (global) {
+    global_count = global->v->size;
+    fields_count += global_count;
+  } else {
+    LOGI("No global targets");
+  }
+
   write(fd, &fields_count, sizeof(fields_count));
 
+  const jsmnf_pair *field = NULL;
   for (unsigned int i = 0; i < fields_count; i++) {
     /* current entry in the app's array of objects
     can obtain field, value, name, type, build... */
-    const jsmnf_pair *entry = &app->fields[i];
+    const jsmnf_pair *entry;
+    if (i < global_count) {
+      entry = &global->fields[i];
+    } else {
+      entry = &app->fields[i - global_count];
+    }
 
     const jsmnf_pair *field_pair = jsmnf_find(entry, "field", 5);
     if (field_pair && fields_obj) {
@@ -337,12 +355,11 @@ skip_creation:
       LOGV("(%d) field_value: %s", i, field_value);
 
       field = jsmnf_find(fields_obj, field_value, strlen(field_value));
-      if (!field) {
-        LOGD("(%d) No entries for %s, fallbacking to per-app config", i, field_value);
-        field = entry;
-      }
+
       free((void*)field_value);
-    } else {
+    }
+
+    if (!field) {
       LOGD("(%d) Field not set or fields missing", i);
       field = entry;
     }
@@ -360,7 +377,7 @@ skip_creation:
     const char *fclass = strndup(json_ptr + f_class->v->start, (int)(f_class->v->end - f_class->v->start));
     const char *value = strndup(json_ptr + f_value->v->start, (int)(f_value->v->end - f_value->v->start));
 
-    LOGD("app(%d)=%s\nname: %s\ntype: %s\nclass: %s\nvalue: %s", i, app_name, name, type, fclass, value);
+    LOGD("app(%d)=%s\nname: %s\ntype: %s\nclass: %s\nvalue: %s", i, pkg, name, type, fclass, value);
 
     unsigned int spec_i = 0;
 
@@ -381,7 +398,6 @@ skip_creation:
 
     free((void*)name); free((void*)type); free((void*)fclass); free((void*)value);
   }
-  free((void*)app_name);
 
 close:
   if(config_fd) close(config_fd);
