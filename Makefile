@@ -71,3 +71,6 @@ installModule: build
 
 installModuleAndReboot: installModule
 	$(ADB_SHELL)su -c reboot
+
+analyze:
+	$(MAKE) -s build CC="$(CC) --analyze -Xanalyzer -analyzer-output=text -Wno-unused-command-line-argument"
