@@ -342,7 +342,6 @@ skip_direct:
   fields_count += global_count;
   write(fd, &fields_count, sizeof(fields_count));
 
-  const jsmnf_pair *field = NULL;
   for (unsigned int i = 0; i < fields_count; i++) {
     /* current entry in the app's array of objects
     can obtain field, value, name, type, build... */
@@ -353,10 +352,12 @@ skip_direct:
       entry = &app->fields[i - global_count];
     }
 
+    const jsmnf_pair *field = NULL;
+
     const jsmnf_pair *field_pair = jsmnf_find(entry, "field", 5);
     if (field_pair && fields_obj) {
       const char *field_value = strndup(json_ptr + field_pair->v->start, (int)(field_pair->v->end - field_pair->v->start));
-      LOGV("(%d) field_value: %s", i, field_value);
+      LOGD("(%d) field_value: %s", i, field_value);
 
       field = jsmnf_find(fields_obj, field_value, strlen(field_value));
 
