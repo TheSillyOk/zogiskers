@@ -31,20 +31,6 @@ inline static void read_from_fd(int fd, char* var, size_t size, unsigned int i) 
   write(fd, &reply, sizeof(reply));
 }
 
-inline static void write_to_fd(int fd, const char* var) {
-  if (var == NULL) return;
-  write(fd, var, strlen(var));
-
-  size_t reply = 0;
-  ssize_t r = read(fd, &reply, sizeof(reply));
-
-  if (r <= 0) {
-    LOGE("Received failed response from %s write (%zu)", var, reply);
-  } else {
-    LOGD("Written %s(%zu) reply(%zu)", var, strlen(var), reply);
-  }
-}
-
 char *get_string_data(JNIEnv *env, jstring *value) {
   const char *str = (*env)->GetStringUTFChars(env, *value, 0);
   if (str == NULL) return NULL;
@@ -100,7 +86,6 @@ those are triggered by it on each stage:
 */
 void pre_app_specialize(void *mod_data, struct AppSpecializeArgs *args) {
   (void) mod_data;
-  LOGD("Pre app specialize");
   api_table->setOption(api_table->impl, DLCLOSE_MODULE_LIBRARY);
 
   char *process_name = get_string_data(java_env, args->nice_name);
@@ -191,6 +176,7 @@ void pre_app_specialize(void *mod_data, struct AppSpecializeArgs *args) {
     if ((*java_env)->ExceptionCheck(java_env)) (*java_env)->ExceptionClear(java_env);
     (*java_env)->DeleteLocalRef(java_env, fclass);
   }
+  LOGD("Finished replacing fields for %s", package_name);
   close(fd);
 
 free:
@@ -205,6 +191,7 @@ void post_app_specialize(void *mod_data, const struct AppSpecializeArgs *args) {
 
 void pre_server_specialize(void *mod_data, struct ServerSpecializeArgs *args) {
   (void) mod_data; (void) args;
+  api_table->setOption(api_table->impl, DLCLOSE_MODULE_LIBRARY);
 }
 
 void post_server_specialize(void *mod_data, const struct ServerSpecializeArgs *args) {
@@ -227,6 +214,9 @@ void zygisk_module_entry(struct api_table *table, JNIEnv *env) {
   if (!table->registerModule(table, &abi)) return;
 }
 
+#undef TAG
+#define TAG "zogisko-one-companion"
+
 static time_t cached_mtime = 0;
 char *json_ptr;
 jsmnf_table *table;
@@ -243,12 +233,23 @@ char *strndup(const char *restrict str, size_t length) {
   return copy;
 }
 
+inline static void write_to_fd(int fd, const char* var) {
+  if (var == NULL) return;
+  write(fd, var, strlen(var));
+
+  size_t reply = 0;
+  ssize_t r = read(fd, &reply, sizeof(reply));
+
+  if (r <= 0) {
+    LOGE("Received failed response from %s write (%zu)", var, reply);
+  } else {
+    LOGD("Written %s(%zu) reply(%zu)", var, strlen(var), reply);
+  }
+}
+
 void zygisk_companion_entry(int fd) {
   char pkg[128] = {0}; unsigned int fields_count = 0; struct stat st;
   const char *filename = "/data/adb/modules/zogisko_one/config.json";
-
-  #undef TAG
-  #define TAG "zogisko-one-companion"
 
   size_t r = read(fd, pkg, sizeof(pkg) - 1);
   if (r <= 0) {
@@ -275,6 +276,7 @@ void zygisk_companion_entry(int fd) {
     goto skip_creation;
   }
 
+  LOGI("Updating config.json");
   if (cached_mtime != 0) {
     free(json_ptr);
     free(table);
@@ -328,7 +330,7 @@ skip_creation:
   const jsmnf_pair *app = jsmnf_find(apps, pkg, strlen(pkg));
   /* find requested app for early skip or execution */
   if (!app) {
-    LOGI("pkg: %s not targetted directly", pkg);
+    LOGD("pkg: %s not targetted directly", pkg);
     goto skip_direct;
   }
 
