@@ -223,6 +223,51 @@ jsmnf_table *table;
 const jsmnf_pair *apps; const jsmnf_pair *global; const jsmnf_pair *fields_obj;
 unsigned int global_count = 0;
 
+typedef struct {
+  const char *name;
+  const char *fclass; // "build" or "version"
+  const char *type;   // "Ljava/lang/String;", "I", "J"
+} BuildField;
+
+static const BuildField KNOWN_FIELDS[] = {
+  // android/os/Build (Strings)
+  {"BOARD", "build", "Ljava/lang/String;"},
+  {"BOOTLOADER", "build", "Ljava/lang/String;"},
+  {"BRAND", "build", "Ljava/lang/String;"},
+  {"DEVICE", "build", "Ljava/lang/String;"},
+  {"DISPLAY", "build", "Ljava/lang/String;"},
+  {"FINGERPRINT", "build", "Ljava/lang/String;"},
+  {"HARDWARE", "build", "Ljava/lang/String;"},
+  {"HOST", "build", "Ljava/lang/String;"},
+  {"ID", "build", "Ljava/lang/String;"},
+  {"MANUFACTURER", "build", "Ljava/lang/String;"},
+  {"MODEL", "build", "Ljava/lang/String;"},
+  {"PRODUCT", "build", "Ljava/lang/String;"},
+  {"TAGS", "build", "Ljava/lang/String;"},
+  {"TYPE", "build", "Ljava/lang/String;"},
+  {"USER", "build", "Ljava/lang/String;"},
+
+  // android/os/Build (Longs)
+  {"TIME", "build", "J"},
+
+  // android/os/Build$VERSION
+  {"RELEASE", "version", "Ljava/lang/String;"},
+  {"SDK_INT", "version", "I"},
+  {"SECURITY_PATCH", "version", "Ljava/lang/String;"},
+  {"CODENAME", "version", "Ljava/lang/String;"},
+  {"INCREMENTAL", "version", "Ljava/lang/String;"}
+};
+
+const BuildField *find_by_name(const char *name) {
+  size_t count = sizeof(KNOWN_FIELDS) / sizeof(KNOWN_FIELDS[0]);
+  for (size_t i = 0; i < count; i++) {
+    if (strcmp(KNOWN_FIELDS[i].name, name) == 0)
+      return &KNOWN_FIELDS[i];
+  }
+
+  return NULL;
+}
+
 char *strndup(const char *restrict str, size_t length) {
   char *restrict copy = malloc(length + 1);
   if (copy == NULL) return NULL;
@@ -370,17 +415,35 @@ skip_direct:
     }
 
     const jsmnf_pair *f_name = jsmnf_find(field, "name", 4);
-    const jsmnf_pair *f_type = jsmnf_find(field, "type", 4);
-    const jsmnf_pair *f_class = jsmnf_find(field, "class", 5);
     const jsmnf_pair *f_value = jsmnf_find(entry, "value", 5);
-    if (!f_name || !f_type || !f_class || !f_value) {
-      LOGW("(%d) Missing class, type, name or value", i);
+    if (!f_name || !f_value) {
+      LOGE("(%d) Missing name or value", i);
       continue;
     }
+
     const char *name = strndup(json_ptr + f_name->v->start, (int)(f_name->v->end - f_name->v->start));
-    const char *type = strndup(json_ptr + f_type->v->start, (int)(f_type->v->end - f_type->v->start));
-    const char *fclass = strndup(json_ptr + f_class->v->start, (int)(f_class->v->end - f_class->v->start));
     const char *value = strndup(json_ptr + f_value->v->start, (int)(f_value->v->end - f_value->v->start));
+
+    char *type = NULL;
+    char *fclass = NULL;
+
+    const jsmnf_pair *f_type = jsmnf_find(field, "type", 4);
+    const jsmnf_pair *f_class = jsmnf_find(field, "class", 5);
+    if (!f_class || !f_type) {
+      const BuildField *field = find_by_name(name);
+      if (field) {
+        type = strdup(field->type);
+        fclass = strdup(field->fclass);
+      }
+    } else {
+      type = strndup(json_ptr + f_type->v->start, (int)(f_type->v->end - f_type->v->start));
+      fclass = strndup(json_ptr + f_class->v->start, (int)(f_class->v->end - f_class->v->start));
+    }
+
+    if (!fclass || !type) {
+      LOGE("(%d) Could not get the class/type for the field: %s", i, name);
+      goto clean;
+    }
 
     LOGD("app(%d)=%s\nname: %s\ntype: %s\nclass: %s\nvalue: %s", i, pkg, name, type, fclass, value);
 
@@ -400,8 +463,8 @@ skip_direct:
     write_to_fd(fd, fclass);
     write_to_fd(fd, value);
     LOGD("(%d) finished writing", i);
-
-    free((void*)name); free((void*)type); free((void*)fclass); free((void*)value);
+clean:
+    free((void*)name); free((void*)value); free((void*)fclass); free((void*)type);
   }
 
 close:
